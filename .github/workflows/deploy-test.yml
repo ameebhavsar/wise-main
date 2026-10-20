@@ -1,0 +1,61 @@
+# test-only deploy workflow for the main repo
+#
+# pipeline: install, build, copy index.html to
+# 404.html so client routes survive refresh, upload dist, deploy
+
+name: Deploy test to GitHub Pages
+
+on:
+  push:
+    branches: ["deploy-test"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: deploy-test/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: deploy-test
+
+      - name: Build
+        run: npm run build
+        working-directory: deploy-test
+
+      - name: Add SPA fallback for client-side routes
+        run: cp deploy-test/dist/index.html deploy-test/dist/404.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: deploy-test/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
